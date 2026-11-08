@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
@@ -9,13 +9,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700&family=Inter:wght@300;400;500;600&family=Instrument+Serif:ital@0;1&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&family=Syne:wght@400;600;700&family=Instrument+Serif:ital@0;1&display=swap"
     rel="stylesheet"
   />
 
   <link
     rel="stylesheet"
-    href="{{ url_for('static', filename='CSS/Style.css', v='20260612-2') }}"
+    href="{{ url_for('static', filename='CSS/Style.css', v='20260816-w600') }}"
   />
 </head>
 
@@ -92,53 +92,69 @@
   {% if show_auth_gate %}
   <main>
     <section class="auth-gate" aria-label="Account access">
-      <div class="auth-gate-copy">
-        <p class="hero-eyebrow">TruthLens AI</p>
-        <h1>Analyze news with <span>saved proof</span></h1>
-        <p>Login to keep your analysis history, download reports, and view your dashboard. Guests can analyze without saved history.</p>
-        <div class="auth-benefits">
-          <span>Saved History</span>
-          <span>Download Report</span>
-          <span>Personal Dashboard</span>
-        </div>
-      </div>
-
       <div class="auth-gate-card">
-        <div class="auth-tabs" aria-label="Account options">
-          <button type="button" id="gateLoginTab" class="active" data-auth-tab="login" onclick="switchAuthMode('login')">Login</button>
-          <button type="button" id="gateSignupTab" data-auth-tab="signup" onclick="switchAuthMode('signup')">Sign Up</button>
+        <div class="auth-form-panel">
+          <p class="auth-kicker">TruthLens AI</p>
+          <h1 data-auth-title>Login</h1>
+          <p class="auth-intro">Access saved history, downloadable reports, and your dashboard. Guests can still analyze instantly.</p>
+
+          <div class="auth-tabs" aria-label="Account options">
+            <button type="button" id="gateLoginTab" class="active" data-auth-tab="login" onclick="switchAuthMode('login')">Login</button>
+            <button type="button" id="gateSignupTab" data-auth-tab="signup" onclick="switchAuthMode('signup')">Sign Up</button>
+          </div>
+
+          {% if google_enabled %}
+          <a class="google-btn" href="{{ url_for('google_login') }}">
+            <span class="google-mark" aria-hidden="true">G</span>
+            Continue with Google
+          </a>
+          {% else %}
+          <div class="google-btn is-disabled" aria-disabled="true">
+            <span class="google-mark" aria-hidden="true">G</span>
+            Google setup required
+          </div>
+          {% endif %}
+
+          <form class="auth-form active" id="gateLoginForm" action="{{ url_for('login') }}" method="POST" data-auth-form data-auth-mode="login">
+            <label class="auth-field">
+              <span>Email</span>
+              <input type="email" name="email" placeholder="Enter your email" autocomplete="email" required />
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"></path><path d="m4 7 8 6 8-6"></path></svg>
+            </label>
+            <label class="auth-field">
+              <span>Password</span>
+              <input type="password" name="password" placeholder="Enter your password" autocomplete="current-password" required />
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11h10v8H7z"></path><path d="M9 11V8a3 3 0 0 1 6 0v3"></path></svg>
+            </label>
+            <button type="submit">Login</button>
+          </form>
+
+          <form class="auth-form" id="gateSignupForm" action="{{ url_for('signup') }}" method="POST" data-auth-form data-auth-mode="signup">
+            <label class="auth-field">
+              <span>User name</span>
+              <input type="text" name="name" placeholder="Enter your full name" autocomplete="name" required />
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"></path><path d="M4 20a8 8 0 0 1 16 0"></path></svg>
+            </label>
+            <label class="auth-field">
+              <span>Email</span>
+              <input type="email" name="email" placeholder="Enter your email" autocomplete="email" required />
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"></path><path d="m4 7 8 6 8-6"></path></svg>
+            </label>
+            <label class="auth-field">
+              <span>Password</span>
+              <input type="password" name="password" placeholder="Create a password (min 6 chars)" autocomplete="new-password" minlength="6" required />
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11h10v8H7z"></path><path d="M9 11V8a3 3 0 0 1 6 0v3"></path></svg>
+            </label>
+            <button type="submit">Sign Up</button>
+          </form>
+
+          <form class="guest-form" action="{{ url_for('continue_guest') }}" method="POST" data-guest-form>
+            <button type="submit" class="guest-btn">Continue as Guest</button>
+          </form>
+
+          <p class="auth-footnote" data-auth-note>Need a new account? Select Sign Up above.</p>
+          <div class="auth-message" id="gateAuthMessage" data-auth-message>{% if error %}{{ error }}{% endif %}</div>
         </div>
-
-        {% if google_enabled %}
-        <a class="google-btn" href="{{ url_for('google_login') }}">
-          <span class="google-mark" aria-hidden="true">G</span>
-          Continue with Google
-        </a>
-        {% else %}
-        <div class="google-btn is-disabled" aria-disabled="true">
-          <span class="google-mark" aria-hidden="true">G</span>
-          Google setup required
-        </div>
-        {% endif %}
-
-        <form class="auth-form active" id="gateLoginForm" action="{{ url_for('login') }}" method="POST" data-auth-form data-auth-mode="login">
-          <input type="email" name="email" placeholder="Email" autocomplete="email" required />
-          <input type="password" name="password" placeholder="Password" autocomplete="current-password" required />
-          <button type="submit">Login</button>
-        </form>
-
-        <form class="auth-form" id="gateSignupForm" action="{{ url_for('signup') }}" method="POST" data-auth-form data-auth-mode="signup">
-          <input type="text" name="name" placeholder="Name" autocomplete="name" required />
-          <input type="email" name="email" placeholder="Email" autocomplete="email" required />
-          <input type="password" name="password" placeholder="Password" autocomplete="new-password" minlength="6" required />
-          <button type="submit">Create Account</button>
-        </form>
-
-        <form class="guest-form" action="{{ url_for('continue_guest') }}" method="POST" data-guest-form>
-          <button type="submit" class="guest-btn">Continue as Guest</button>
-        </form>
-
-        <div class="auth-message" id="gateAuthMessage" data-auth-message>{% if error %}{{ error }}{% endif %}</div>
       </div>
     </section>
   </main>
@@ -321,15 +337,6 @@
             </div>
           </div>
 
-          <div class="conf-row">
-            <span class="conf-label">{{ ui.confidence_score }}</span>
-            <span class="conf-value" id="confVal">{% if confidence is not none %}{{ confidence }}%{% else %}N/A{% endif %}</span>
-          </div>
-
-          <div class="conf-track">
-            <div class="conf-fill" id="confFill"></div>
-          </div>
-
           {% if image_type %}
           <div class="image-type-panel">
             <span>{{ ui.image_type_label }}</span>
@@ -339,7 +346,7 @@
 
           {% if human_explanation %}
           <div class="ai-explain-panel">
-            <span>AI Explanation</span>
+            <span>{{ ui.ai_explanation_label }}</span>
             <p>{{ human_explanation }}</p>
           </div>
           {% endif %}
@@ -402,15 +409,35 @@
       {% endif %}
 
       <form class="auth-form active" id="loginForm" action="{{ url_for('login') }}" method="POST" data-auth-form data-auth-mode="login">
-        <input type="email" name="email" placeholder="Email" autocomplete="email" required />
-        <input type="password" name="password" placeholder="Password" autocomplete="current-password" required />
+        <label class="auth-field">
+          <span>Email</span>
+          <input type="email" name="email" placeholder="Enter your email" autocomplete="email" required />
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"></path><path d="m4 7 8 6 8-6"></path></svg>
+        </label>
+        <label class="auth-field">
+          <span>Password</span>
+          <input type="password" name="password" placeholder="Enter your password" autocomplete="current-password" required />
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11h10v8H7z"></path><path d="M9 11V8a3 3 0 0 1 6 0v3"></path></svg>
+        </label>
         <button type="submit">Login</button>
       </form>
 
       <form class="auth-form" id="signupForm" action="{{ url_for('signup') }}" method="POST" data-auth-form data-auth-mode="signup">
-        <input type="text" name="name" placeholder="Name" autocomplete="name" required />
-        <input type="email" name="email" placeholder="Email" autocomplete="email" required />
-        <input type="password" name="password" placeholder="Password" autocomplete="new-password" minlength="6" required />
+        <label class="auth-field">
+          <span>User name</span>
+          <input type="text" name="name" placeholder="Enter your name" autocomplete="name" required />
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"></path><path d="M4 20a8 8 0 0 1 16 0"></path></svg>
+        </label>
+        <label class="auth-field">
+          <span>Email</span>
+          <input type="email" name="email" placeholder="Enter your email" autocomplete="email" required />
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"></path><path d="m4 7 8 6 8-6"></path></svg>
+        </label>
+        <label class="auth-field">
+          <span>Password</span>
+          <input type="password" name="password" placeholder="Create a password" autocomplete="new-password" minlength="6" required />
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11h10v8H7z"></path><path d="M9 11V8a3 3 0 0 1 6 0v3"></path></svg>
+        </label>
         <button type="submit">Create Account</button>
       </form>
 
@@ -426,6 +453,6 @@
     data-server-recents="{{ saved_recents|tojson|forceescape }}"
     hidden
   ></div>
-  <script src="{{ url_for('static', filename='JS/app.js', v='20260612-2') }}"></script>
+  <script src="{{ url_for('static', filename='JS/app.js', v='20260816-w600') }}"></script>
 </body>
 </html>

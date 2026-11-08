@@ -111,24 +111,29 @@ UI_TEXT = {
     "en": {
         "real_news": "Real News",
         "fake_news": "Fake News",
-        "confidence_score": "Confidence Score",
         "reason_label": "Reason",
+        "ai_explanation_label": "AI Explanation",
         "image_type_label": "Detected Image Type",
         "invalid_image": "Please upload a valid image file.",
         "file_too_large": "Image is too large. Please upload an image under 10 MB.",
         "ocr_failed": "OCR could not read this image. Please try a clearer image or paste the news text manually.",
         "missing_input": "Please add news headlines or upload an image with readable text before analyzing.",
         "server_error": "Server error while analyzing. Please try again.",
+        "mismatched_news": "The typed text and uploaded image appear to be about different news. Please submit only one news at a time, or ensure both text and image describe the same news.",
+        "ocr_mismatch_empty": "The uploaded image does not contain readable news text to verify with the typed news. Please submit either only text or an image containing clear news text.",
     },
     "hi": {
         "real_news": "असली खबर",
         "fake_news": "फर्जी खबर",
-        "confidence_score": "विश्वास स्कोर",
         "reason_label": "कारण",
+        "ai_explanation_label": "एआई स्पष्टीकरण",
         "image_type_label": "पहचाना गया इमेज प्रकार",
         "invalid_image": "कृपया सही इमेज फाइल अपलोड करें।",
         "ocr_failed": "OCR इस इमेज को पढ़ नहीं पाया। कृपया साफ इमेज अपलोड करें या खबर का टेक्स्ट खुद लिखें।",
         "missing_input": "कृपया विश्लेषण से पहले खबर का टेक्स्ट डालें या पढ़ने योग्य टेक्स्ट वाली इमेज अपलोड करें।",
+        "server_error": "विश्लेषण के दौरान सर्वर त्रुटि हुई। कृपया पुनः प्रयास करें।",
+        "mismatched_news": "दर्ज किया गया टेक्स्ट और अपलोड की गई इमेज अलग-अलग खबरों के लग रहे हैं। कृपया एक बार में केवल एक खबर दें, या सुनिश्चित करें कि दोनों एक ही खबर से संबंधित हैं।",
+        "ocr_mismatch_empty": "अपलोड की गई इमेज में पढ़ने योग्य खबर का टेक्स्ट नहीं मिला जिससे इसे दर्ज किए गए टेक्स्ट से मिलाया जा सके। कृपया केवल टेक्स्ट दें या साफ टेक्स्ट वाली इमेज अपलोड करें।",
     },
 }
 
@@ -202,9 +207,9 @@ def serialize_analysis_row(row):
         "show_result": True,
         "report_url": url_for("download_report", analysis_id=analysis_id),
         "ui": {
-            "confidence_score": ui["confidence_score"],
             "reason_label": ui["reason_label"],
             "image_type_label": ui["image_type_label"],
+            "ai_explanation_label": ui.get("ai_explanation_label", "AI Explanation"),
         },
     }
 
@@ -734,9 +739,9 @@ def build_json_response(**context):
         "selected_language": data.get("selected_language"),
         "show_result": data.get("show_result"),
         "ui": {
-            "confidence_score": data["ui"]["confidence_score"],
             "reason_label": data["ui"]["reason_label"],
             "image_type_label": data["ui"]["image_type_label"],
+            "ai_explanation_label": data["ui"].get("ai_explanation_label", "AI Explanation"),
         },
     })
 
@@ -840,8 +845,11 @@ def signup():
     return redirect(url_for("home"))
 
 
-@app.route("/login", methods=["POST"])
+@app.route("/login", methods=["GET", "POST"])
 def login():
+    if request.method == "GET":
+        session.pop("guest_mode", None)
+        return redirect(url_for("home"))
     email = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "")
 
@@ -920,7 +928,7 @@ def google_callback():
     return redirect(url_for("home"))
 
 
-@app.route("/logout", methods=["POST"])
+@app.route("/logout", methods=["GET", "POST"])
 def logout():
     session.pop("user_id", None)
     session.pop("guest_mode", None)
@@ -1001,7 +1009,6 @@ Generated: {row['created_at']}
 User: {current_user['name']} <{current_user['email']}>
 
 Verdict: {row['display_prediction']}
-Confidence: {row['confidence'] if row['confidence'] is not None else 'N/A'}%
 Detected Image Type: {row['image_type'] or 'Text input'}
 
 Reason:
@@ -1139,42 +1146,66 @@ def build_prediction_reason(news_text, text_vector, prediction_raw, language):
     return "The model marked this as Fake News because the writing pattern is closer to fake or misleading news articles."
 
 
-def build_human_explanation(prediction_raw, confidence, typed_text, extracted_text, uploaded_image, image_type, language):
+def check_news_similarity(text1, text2):
+    t1 = (text1 or "").strip()
+    t2 = (text2 or "").strip()
+    if not t1 or not t2:
+        return True, 1.0
+
+    try:
+        vec1 = vectorizer.transform([t1])
+        vec2 = vectorizer.transform([t2])
+        from sklearn.metrics.pairwise import cosine_similarity
+        cos_sim = float(cosine_similarity(vec1, vec2)[0][0])
+    except Exception:
+        cos_sim = 0.0
+
+    hindi_stopwords = {
+        "पर", "को", "ने", "का", "के", "की", "से", "में", "है", "हैं", "था",
+        "थे", "थी", "और", "यह", "वह", "लिए", "भी", "हो", "गया", "गई", "किया", "दिया", "एक"
+    }
+    english_stopwords = {
+        "about", "after", "also", "and", "are", "before", "from", "have",
+        "into", "that", "the", "their", "this", "with", "will", "your",
+        "news", "image", "photo", "today", "yesterday", "says", "said"
+    }
+    stop_words = hindi_stopwords | english_stopwords
+
+    def extract_keywords(text):
+        raw_words = re.split(r"[\s,।!?:;\"'()\[\]{}<>/\\+=\-_*&^%$#@~`|]+", text or "")
+        return {w.lower().strip() for w in raw_words if len(w.strip()) > 2 and w.lower().strip() not in stop_words}
+
+    w1 = extract_keywords(t1)
+    w2 = extract_keywords(t2)
+    common = w1.intersection(w2)
+
+    overlap_ratio = len(common) / max(min(len(w1), len(w2)), 1) if (w1 and w2) else 0.0
+    is_same = (cos_sim >= 0.12) or (overlap_ratio >= 0.20 and len(common) >= 1) or (len(common) >= 2)
+    return is_same, max(cos_sim, overlap_ratio)
+
+
+def build_human_explanation(prediction_raw, typed_text, extracted_text, uploaded_image, image_type, language, is_matched_multimodal=False):
     language = normalize_language(language)
     is_real = int(prediction_raw) == 1
-    source_note = ""
-
-    if uploaded_image:
-        source_note = " The image result depends on how clearly OCR could read the screenshot."
-    elif typed_text:
-        source_note = " The result is based on the headline or article text you pasted."
-
-    if confidence is None:
-        confidence_note = "The confidence score is unavailable, so use this as a rough guide."
-    elif confidence >= 85:
-        confidence_note = "The model found a strong pattern, so confidence is high."
-    elif confidence >= 65:
-        confidence_note = "The model found a useful pattern, but you should still double-check it."
-    else:
-        confidence_note = "The confidence is low, so treat this as a warning and verify manually."
 
     if language == "hi":
         if is_real:
-            verdict_note = "Simple explanation: Yeh news real lag rahi hai kyunki iska writing style normal news report jaisa hai."
-            action_note = "Phir bhi source, date, aur trusted news websites par check karna better hai."
+            if is_matched_multimodal:
+                return "सरल व्याख्या: यह खबर असली प्रतीत होती है क्योंकि इसका लेखन और संदर्भ औपचारिक समाचार रिपोर्टिंग से मेल खाता है। टेक्स्ट और इमेज दोनों एक ही खबर से संबंधित पाए गए हैं। फिर भी, किसी भी जानकारी की तारीख और आधिकारिक स्रोत से पुष्टि करना हमेशा बेहतर होता है।"
+            return "सरल व्याख्या: यह खबर असली प्रतीत होती है क्योंकि इसका लेखन और संदर्भ औपचारिक और प्रामाणिक समाचार रिपोर्टिंग जैसा है। फिर भी, किसी भी जानकारी को पूरी तरह स्वीकार करने से पहले तारीख और विश्वसनीय स्रोत की जांच अवश्य करें।"
         else:
-            verdict_note = "Simple explanation: Yeh news suspicious lag rahi hai kyunki iska wording misleading ya fake news patterns se match karta hai."
-            action_note = "Isko share karne se pehle source, date, aur trusted reports se verify karo."
-        return f"{verdict_note} {confidence_note}{source_note} {action_note}"
+            if is_matched_multimodal:
+                return "सरल व्याख्या: यह खबर फर्जी या भ्रामक प्रतीत होती है क्योंकि इसमें प्रयुक्त शब्दावली और दावे फेक खबरों के पैटर्न से मेल खाते हैं। टेक्स्ट और इमेज दोनों एक ही खबर से जुड़े हैं। इसे आगे साझा करने से पहले विश्वसनीय समाचार स्रोतों और आधिकारिक बयानों से इसकी पुष्टि जरूर करें।"
+            return "सरल व्याख्या: यह खबर फर्जी या भ्रामक प्रतीत होती है क्योंकि इसमें प्रयुक्त शब्दावली और भाषा भ्रामक या फेक खबरों के पैटर्न से मेल खाती है। इसे आगे साझा करने से पहले विश्वसनीय समाचार स्रोतों और आधिकारिक बयानों से इसकी पुष्टि जरूर करें।"
 
     if is_real:
-        verdict_note = "In simple words, this news looks more likely to be real because its wording is closer to regular news reporting."
-        action_note = "Still, check the source, date, and trusted reports before fully trusting it."
+        if is_matched_multimodal:
+            return "Simple explanation: This news appears to be real because its wording and style align with authentic news reporting. Both the text and the uploaded image refer to the same news. As a best practice, always check the publication date and trusted sources."
+        return "Simple explanation: This news appears to be real because its wording and style align with formal, authentic news reporting. Still, always verify the publication date and trusted sources before sharing."
     else:
-        verdict_note = "In simple words, this news looks suspicious because its wording is closer to fake or misleading news patterns."
-        action_note = "Do not share it until you verify the source, date, and trusted news coverage."
-
-    return f"{verdict_note} {confidence_note}{source_note} {action_note}"
+        if is_matched_multimodal:
+            return "Simple explanation: This news appears suspicious or fake because its wording matches common patterns of misinformation. Both the text and the uploaded image refer to the same news. Do not share it before verifying with reliable sources and official reports."
+        return "Simple explanation: This news appears suspicious or fake because its wording and pattern match common misleading news articles. Do not share it without verifying with trusted news sources and official reports."
 
 
 def localize_image_type(platform, language):
@@ -1438,10 +1469,10 @@ def predict():
     selected_language = normalize_language(request.form.get("language", "en"))
     ui = get_ui_text(selected_language)
     typed_text = request.form.get("news", "").strip()
-    news_text = typed_text
     extracted_text = ""
     uploaded_image = None
     image_type = None
+    is_matched_multimodal = False
 
     image = request.files.get("image")
 
@@ -1472,14 +1503,36 @@ def predict():
                 selected_language=selected_language
             )
 
-        news_text = f"{news_text} {extracted_text}".strip()
+    # Validate multimodal input: only text, only image, or both if same news
+    if typed_text and uploaded_image:
+        if not extracted_text.strip():
+            return respond_index(
+                error=ui.get("ocr_mismatch_empty", ui["ocr_failed"]),
+                uploaded_image=uploaded_image,
+                selected_language=selected_language
+            )
 
-        if not extracted_text.strip() and not typed_text:
+        is_same_news, _ = check_news_similarity(typed_text, extracted_text)
+        if not is_same_news:
+            return respond_index(
+                error=ui["mismatched_news"],
+                uploaded_image=uploaded_image,
+                selected_language=selected_language
+            )
+        is_matched_multimodal = True
+        news_text = f"{typed_text}\n{extracted_text}".strip()
+    elif typed_text:
+        news_text = typed_text
+    elif uploaded_image:
+        if not extracted_text.strip():
             return respond_index(
                 error=ui["ocr_failed"],
                 uploaded_image=uploaded_image,
                 selected_language=selected_language
             )
+        news_text = extracted_text
+    else:
+        news_text = ""
 
     if news_text.strip() == "":
         return respond_index(
@@ -1504,12 +1557,12 @@ def predict():
     reason = build_prediction_reason(news_text, text_vector, prediction_raw, selected_language)
     human_explanation = build_human_explanation(
         prediction_raw,
-        confidence,
         typed_text,
         extracted_text,
         uploaded_image,
         image_type,
         selected_language,
+        is_matched_multimodal=is_matched_multimodal,
     )
     analysis_id = save_analysis_for_current_user(
         news_text=news_text,

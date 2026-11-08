@@ -25,6 +25,8 @@
         authModal: document.getElementById("authModal"),
         authMessage: document.getElementById("authMessage"),
         authTitle: document.getElementById("authTitle"),
+        authTitles: Array.from(document.querySelectorAll("[data-auth-title]")),
+        authNotes: Array.from(document.querySelectorAll("[data-auth-note]")),
         loginForm: document.getElementById("loginForm"),
         signupForm: document.getElementById("signupForm"),
         loginTab: document.getElementById("loginTab"),
@@ -271,9 +273,18 @@
         }
 
         const isSignup = mode === "signup";
+        const title = isSignup ? "Sign Up" : "Login";
         if (elements.authTitle) {
           elements.authTitle.textContent = isSignup ? "Create Account" : "Login";
         }
+        elements.authTitles.forEach((heading) => {
+          heading.textContent = title;
+        });
+        elements.authNotes.forEach((note) => {
+          note.textContent = isSignup
+            ? "Already have an account? Select Login above."
+            : "Need a new account? Select Sign Up above.";
+        });
         elements.authForms.forEach((form) => {
           form.classList.toggle("active", form.dataset.authMode === mode);
         });
@@ -387,10 +398,9 @@
         }
 
         const resultClass = data.result_class === "real" ? "real" : "fake";
-        const confidence = data.confidence == null ? "N/A" : `${escapeHtml(data.confidence)}%`;
-        const confidenceLabel = escapeHtml(data.ui?.confidence_score || "Confidence Score");
         const imageTypeLabel = escapeHtml(data.ui?.image_type_label || "Input Source");
         const reasonLabel = escapeHtml(data.ui?.reason_label || "Reason");
+        const aiExplanationLabel = escapeHtml(data.ui?.ai_explanation_label || "AI Explanation");
         const imageType = data.image_type
           ? `
             <div class="image-type-panel">
@@ -402,7 +412,7 @@
         const humanExplanation = data.human_explanation
           ? `
             <div class="ai-explain-panel">
-              <span>AI Explanation</span>
+              <span>${aiExplanationLabel}</span>
               <p>${escapeHtml(data.human_explanation)}</p>
             </div>
           `
@@ -425,23 +435,12 @@
                 </div>
               </div>
 
-              <div class="conf-row">
-                <span class="conf-label">${confidenceLabel}</span>
-                <span class="conf-value" id="confVal">${confidence}</span>
-              </div>
-
-              <div class="conf-track">
-                <div class="conf-fill" id="confFill"></div>
-              </div>
-
               ${imageType}
               ${humanExplanation}
               ${reportAction ? `<div class="result-actions">${reportAction}</div>` : ""}
             </div>
           </section>
         `;
-
-        animateConfidence();
       }
 
       function renderAnalysisResponse(data) {
